@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>고양이 쓰다듬기</title>
+<style>
+  * { box-sizing: border-box; }
+  /* 고양이 색 (시작 화면에서 바뀜) */
+  :root { --fur: #f0a35e; --stripe: #d9823f; --belly: #fff3e3; --eye: #3b2a1e; --whisker: #3b2a1e; }
+  #kitty { filter: drop-shadow(0 3px 2px #0002); }
+  body {
+    margin: 0; height: 100vh; overflow: hidden;
+    font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    background: radial-gradient(circle at 50% 40%, #fff4e6 0%, #ffe0c2 60%, #f7c99b 100%);
+    color: #5a3e2b; user-select: none;
+  }
+
+  /* 상단 게이지 */
+  #hud {
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+    text-align: center; z-index: 5; width: min(420px, 80vw);
+  }
+  #message { font-size: 24px; font-weight: 700; margin-bottom: 10px; min-height: 32px; }
+  .meterRow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 14px; font-weight: 700; }
+  .meterRow span { width: 70px; text-align: right; white-space: nowrap; }
+  .meter { flex: 1; height: 14px; background: #fff8; border-radius: 10px; overflow: hidden; border: 2px solid #e8a87c; }
+  .meter div { height: 100%; width: 0%; transition: width .2s; }
+  #meterFill { background: linear-gradient(90deg, #ffb3c6, #ff6b9d); }
+  #fullFill { background: linear-gradient(90deg, #ffe29a, #ffb347); }
+
+  /* 고양이 */
+  #cat { position: absolute; left: 50%; top: 57%; transform: translate(-50%, -50%);
+         width: min(640px, 90vw, 80vh); }
+  #cat svg { width: 100%; display: block; overflow: visible; }
+  #kitty { transform-box: fill-box; transform-origin: 50% 100%; }
+  #head { transform-origin: 200px 240px; transition: transform .25s ease-out; }
+  #tail { transform-origin: 300px 330px; animation: wag 2s ease-in-out infinite; }
+  @keyframes wag { 0%,100% { transform: rotate(-6deg); } 50% { transform: rotate(10deg); } }
+  #eyesClosed, #blush { opacity: 0; transition: opacity .2s; }
+  .happy #eyesClosed, .happy #blush { opacity: 1; }
+  .happy #eyesOpen { opacity: 0; }
+  .blink #eyesOpen { transform: scaleY(0.1); }
+  #eyesOpen { transform-origin: 200px 165px; transition: transform .08s, opacity .2s; }
+  #bowlFood { transform-box: fill-box; transform-origin: 50% 100%; opacity: 0; }
+
+  /* 게이지가 가득 차면 하는 동작 */
+  #kitty.jump  { animation: jump 1.6s ease-in-out; }
+  #kitty.roll  { animation: roll 1.6s ease-in-out; transform-origin: 50% 60%; }
+  #kitty.dance { animation: dance .55s ease-in-out 3; }
+  @keyframes jump {
+    0%,40%,80%,100% { transform: translateY(0) scale(1, 1); }
+    10%,50% { transform: translateY(0) scale(1.08, .9); }
+    25% { transform: translateY(-90px) scale(.95, 1.05); }
+    65% { transform: translateY(-60px) scale(.95, 1.05); }
+  }
+  @keyframes roll {
+    0% { transform: rotate(0) translateX(0); }
+    50% { transform: rotate(180deg) translateX(0); }
+    100% { transform: rotate(360deg) translateX(0); }
+  }
+  @keyframes dance {
+    0%,100% { transform: rotate(0); }
+    25% { transform: rotate(-12deg) translateY(-15px); }
+    75% { transform: rotate(12deg) translateY(-15px); }
+  }
+
+  /* 말풍선 */
+  #bubble {
+    position: absolute; left: 62%; top: 2%; z-index: 4;
+    background: #fff; padding: 10px 18px; border-radius: 20px; font-size: 22px; font-weight: 700;
+    box-shadow: 0 4px 10px #0002; white-space: nowrap;
+    opacity: 0; transform: scale(.6); transition: opacity .2s, transform .2s;
+  }
+  #bubble::after {
+    content: ""; position: absolute; left: 20px; bottom: -10px;
+    border: 10px solid transparent; border-top-color: #fff; border-bottom: 0;
+  }
+  #bubble.show { opacity: 1; transform: scale(1); }
+
+  /* 밥 메뉴 */
+  #foods {
+    position: absolute; left: 16px; top: 50%; transform: translateY(-50%); z-index: 6;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  #foods h3 { margin: 0; text-align: center; font-size: 16px; }
+  .food {
+    position: relative; overflow: hidden; width: 96px; padding: 10px 6px 12px;
+    border: none; border-radius: 18px; background: #fff; cursor: pointer;
+    box-shadow: 0 4px 0 #e8a87c; color: #5a3e2b; font-family: inherit;
+    transition: transform .15s, opacity .2s;
+  }
+  .food .icon { font-size: 38px; display: block; }
+  .food .name { font-size: 14px; font-weight: 700; }
+  .food .bar { position: absolute; left: 0; bottom: 0; height: 6px; width: calc(var(--p, 0) * 1%); background: #ff8fab; }
+  .food.hover { transform: scale(1.08); }
+  #foods.busy .food { opacity: .45; }
+  @media (max-width: 760px), (max-height: 560px) {
+    #foods { gap: 6px; left: 8px; }
+    #foods h3 { font-size: 13px; }
+    .food { width: 64px; padding: 6px 4px 9px; border-radius: 14px; }
+    .food .icon { font-size: 26px; }
+    .food .name { font-size: 11px; }
+    #hud { width: min(420px, calc(100vw - 180px)); }
+    #message { font-size: 18px; }
+  }
+  .flyFood {
+    position: absolute; z-index: 9; font-size: 40px; pointer-events: none;
+    transform: translate(-50%, -50%); transition: left .6s ease-in, top .6s cubic-bezier(.5,-0.6,.8,1);
+  }
+
+  /* 손 커서 */
+  #hand {
+    position: absolute; font-size: 64px; transform: translate(-50%, -50%);
+    pointer-events: none; z-index: 10; display: none;
+    filter: drop-shadow(0 4px 6px #0003); transition: font-size .15s;
+  }
+  #hand.petting { font-size: 74px; }
+
+  /* 하트 효과 */
+  .heart {
+    position: absolute; pointer-events: none; z-index: 9; font-size: 28px;
+    animation: floatUp 1.2s ease-out forwards;
+  }
+  @keyframes floatUp {
+    from { opacity: 1; transform: translate(-50%, -50%) scale(.6); }
+    to   { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy, -160px))) scale(1.3); }
+  }
+  #purr {
+    position: absolute; left: 30%; top: 8%;
+    font-size: 22px; font-weight: 700; color: #d9658a; opacity: 0; transition: opacity .3s; z-index: 4;
+  }
+
+  /* 카메라 미리보기 */
+  #preview {
+    position: absolute; right: 16px; bottom: 16px; width: 200px; border-radius: 12px;
+    overflow: hidden; border: 3px solid #fff; box-shadow: 0 4px 12px #0003; display: none; z-index: 6;
+  }
+  #preview video, #preview canvas { width: 100%; display: block; transform: scaleX(-1); }
+  #preview canvas { position: absolute; top: 0; left: 0; }
+
+  #status { position: absolute; left: 50%; transform: translateX(-50%); bottom: 8px; white-space: nowrap; font-size: 14px; opacity: .8; z-index: 6; }
+  #soundBtn {
+    position: absolute; right: 16px; top: 16px; z-index: 6; font-size: 22px;
+    background: #fff; border: none; border-radius: 50%; width: 48px; height: 48px; cursor: pointer;
+    box-shadow: 0 2px 6px #0002;
+  }
+
+  /* 시작 화면 */
+  #intro {
+    position: absolute; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
+    background: #fff4e6ee; padding: 16px; overflow-y: auto;
+  }
+  #intro .box { text-align: center; max-width: 440px; }
+  #intro h1 { font-size: 36px; margin: 0 0 12px; }
+  #intro p { line-height: 1.6; margin: 0 0 24px; }
+  #intro button {
+    font-size: 18px; font-weight: 700; padding: 14px 26px; margin: 6px; border-radius: 30px;
+    border: none; cursor: pointer; background: #ff8fab; color: #fff; box-shadow: 0 4px 0 #d9658a;
+  }
+  #intro button.secondary { background: #fff; color: #5a3e2b; box-shadow: 0 4px 0 #e8a87c; }
+  #intro button:active { transform: translateY(3px); box-shadow: none; }
+  #catPreview { width: 150px; margin: 0 auto 4px; }
+  #catPreview svg { width: 100%; display: block; }
+  #colors { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-bottom: 22px; }
+  #intro #colors button.color {
+    margin: 0; padding: 6px 6px 8px; width: 64px; border-radius: 16px; font-size: 13px;
+    background: #fff; color: #5a3e2b; box-shadow: 0 3px 0 #e8a87c; border: 3px solid transparent;
+  }
+  #intro #colors button.color.selected { border-color: #ff8fab; }
+  .swatch { display: block; width: 34px; height: 34px; margin: 0 auto 4px; border-radius: 50%; border: 2px solid #0001; }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div id="message">고양이를 쓰다듬어 주세요</div>
+  <div class="meterRow"><span>💗 기분</span><div class="meter"><div id="meterFill"></div></div></div>
+  <div class="meterRow"><span>🍚 배부름</span><div class="meter"><div id="fullFill"></div></div></div>
+</div>
+
+<div id="foods">
+  <h3>밥 주기</h3>
+  <button class="food" data-food="can"><span class="icon">🥫</span><span class="name">캔 사료</span><span class="bar"></span></button>
+  <button class="food" data-food="fish"><span class="icon">🐟</span><span class="name">생선</span><span class="bar"></span></button>
+  <button class="food" data-food="milk"><span class="icon">🥛</span><span class="name">우유</span><span class="bar"></span></button>
+</div>
+
+<div id="cat">
+  <div id="bubble"></div>
+  <div id="purr">골골골~</div>
+  <svg viewBox="-130 0 530 430">
+    <!-- 밥그릇 -->
+    <g id="bowl">
+      <ellipse cx="-50" cy="420" rx="60" ry="8" fill="#0001"/>
+      <path d="M-105 380 h110 l-14 38 h-82 z" fill="#6fb3d2"/>
+      <g id="bowlFood">
+        <ellipse cx="-50" cy="380" rx="48" ry="14" fill="#c98b4f"/>
+        <text id="bowlEmoji" x="-50" y="388" font-size="34" text-anchor="middle">🐟</text>
+      </g>
+      <ellipse cx="-50" cy="380" rx="55" ry="9" fill="none" stroke="#8cc8e3" stroke-width="6"/>
+      <text x="-50" y="408" font-size="16" text-anchor="middle" fill="#fff" font-weight="700">냥</text>
+    </g>
+    <g id="kitty">
+      <!-- 꼬리 -->
+      <g id="tail">
+        <path d="M290 340 Q370 330 360 250 Q355 210 330 200" style="stroke:var(--fur)" stroke-width="26" fill="none" stroke-linecap="round"/>
+        <path d="M352 268 l14 -6 M356 240 l14 -2" style="stroke:var(--stripe)" stroke-width="6" stroke-linecap="round"/>
+      </g>
+      <!-- 몸통 -->
+      <g id="body">
+        <ellipse cx="200" cy="320" rx="115" ry="85" style="fill:var(--fur)"/>
+        <ellipse cx="200" cy="340" rx="65" ry="60" style="fill:var(--belly)"/>
+        <path d="M110 300 q15 -5 25 5 M265 305 q15 -10 25 -5" style="stroke:var(--stripe)" stroke-width="7" fill="none" stroke-linecap="round"/>
+        <ellipse cx="160" cy="395" rx="30" ry="18" style="fill:var(--belly)"/>
+        <ellipse cx="240" cy="395" rx="30" ry="18" style="fill:var(--belly)"/>
+      </g>
+      <!-- 머리 -->
+      <g id="head">
+        <polygon points="115,120 125,30 185,85" style="fill:var(--fur)"/>
+        <polygon points="285,120 275,30 215,85" style="fill:var(--fur)"/>
+        <polygon points="130,105 135,55 168,85" fill="#ffc2c2"/>
+        <polygon points="270,105 265,55 232,85" fill="#ffc2c2"/>
+        <ellipse cx="200" cy="170" rx="110" ry="95" style="fill:var(--fur)"/>
+        <path d="M185 82 l5 30 M200 78 v34 M215 82 l-5 30" style="stroke:var(--stripe)" stroke-width="7" stroke-linecap="round"/>
+        <ellipse cx="200" cy="205" rx="60" ry="45" style="fill:var(--belly)"/>
+        <!-- 눈 -->
+        <g id="eyesOpen">
+          <ellipse cx="155" cy="165" rx="16" ry="20" style="fill:var(--eye)"/>
+          <ellipse cx="245" cy="165" rx="16" ry="20" style="fill:var(--eye)"/>
+          <circle cx="160" cy="157" r="6" fill="#fff"/>
+          <circle cx="250" cy="157" r="6" fill="#fff"/>
+        </g>
+        <g id="eyesClosed" style="stroke:var(--eye)" stroke-width="6" fill="none" stroke-linecap="round">
+          <path d="M137 168 q18 -18 36 0"/>
+          <path d="M227 168 q18 -18 36 0"/>
+        </g>
+        <g id="blush" fill="#ff9eb5" opacity=".7">
+          <ellipse cx="128" cy="200" rx="18" ry="10"/>
+          <ellipse cx="272" cy="200" rx="18" ry="10"/>
+        </g>
+        <!-- 코, 입 -->
+        <path d="M190 192 h20 l-10 11 z" fill="#ff8fab"/>
+        <path d="M200 203 q-10 14 -20 4 M200 203 q10 14 20 4" style="stroke:var(--whisker)" stroke-width="4" fill="none" stroke-linecap="round"/>
+        <!-- 수염 -->
+        <g style="stroke:var(--whisker)" stroke-width="3" stroke-linecap="round" opacity=".7">
+          <path d="M150 200 l-60 -10 M150 210 l-60 5"/>
+          <path d="M250 200 l60 -10 M250 210 l60 5"/>
+        </g>
+      </g>
+    </g>
+  </svg>
+</div>
+
+<div id="hand">🖐️</div>
+
+<div id="preview">
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="overlay"></canvas>
+</div>
+<div id="status"></div>
+<button id="soundBtn" title="골골송 소리 켜기/끄기">🔊</button>
+
+<div id="intro">
+  <div class="box">
+    <h1>🐱 고양이 쓰다듬기</h1>
+    <p>카메라 앞에서 손을 펴고 고양이 위로 움직여 보세요.<br>
+       기분 게이지가 가득 차면 고양이가 재롱을 부려요!<br>
+       왼쪽 밥 위에 손을 1초 올려두면 밥을 줄 수 있어요.<br>
+       (카메라 영상은 내 컴퓨터 안에서만 처리돼요)</p>
+    <div id="catPreview"></div>
+    <div id="colors"></div>
+    <button id="startCam">📷 카메라로 시작</button>
+    <button id="startMouse" class="secondary">🖱️ 마우스로 하기</button>
+  </div>
+</div>
+
+<script type="module">
+const $ = id => document.getElementById(id);
+const catEl = $("cat"), kittyEl = $("kitty"), handEl = $("hand"), statusEl = $("status");
+
+// ---------- 고양이 색 고르기 ----------
+const CAT_COLORS = {
+  cheese: { name: "치즈",   fur: "#f0a35e", stripe: "#d9823f", belly: "#fff3e3", eye: "#3b2a1e", whisker: "#3b2a1e" },
+  gray:   { name: "회색",   fur: "#9aa3ad", stripe: "#6f7780", belly: "#eef1f4", eye: "#2d3238", whisker: "#2d3238" },
+  tabby:  { name: "고등어", fur: "#a9744f", stripe: "#6e4529", belly: "#f3e3d3", eye: "#2b1d14", whisker: "#2b1d14" },
+  black:  { name: "검정",   fur: "#3d3a3f", stripe: "#2a272b", belly: "#605b66", eye: "#f5d142", whisker: "#e4e0e8" },
+  white:  { name: "흰색",   fur: "#fbf8f4", stripe: "#e9dfd3", belly: "#ffffff", eye: "#4a8fd8", whisker: "#8a8077" },
+};
+function setCatColor(key) {
+  const c = CAT_COLORS[key];
+  for (const v of ["fur", "stripe", "belly", "eye", "whisker"])
+    document.documentElement.style.setProperty("--" + v, c[v]);
+  document.querySelectorAll("#colors .color").forEach(b => b.classList.toggle("selected", b.dataset.color === key));
+  try { localStorage.setItem("catColor", key); } catch {}
+}
+// 시작 화면 미리보기: 고양이 그림을 복사해서 보여줌 (밥그릇은 빼고)
+const previewSvg = catEl.querySelector("svg").cloneNode(true);
+previewSvg.setAttribute("viewBox", "0 0 400 430");
+for (const sel of ["#bowl", "#eyesClosed", "#blush"]) previewSvg.querySelector(sel).remove();
+previewSvg.querySelectorAll("[id]").forEach(el => el.removeAttribute("id"));
+$("catPreview").appendChild(previewSvg);
+for (const [key, c] of Object.entries(CAT_COLORS)) {
+  const b = document.createElement("button");
+  b.className = "color"; b.dataset.color = key;
+  b.innerHTML = `<span class="swatch" style="background: linear-gradient(135deg, ${c.fur} 55%, ${c.belly} 55%)"></span>${c.name}`;
+  b.onclick = () => setCatColor(key);
+  $("colors").appendChild(b);
+}
+let savedColor = "cheese";
+try { savedColor = localStorage.getItem("catColor") || "cheese"; } catch {}
+setCatColor(CAT_COLORS[savedColor] ? savedColor : "cheese");
+
+// ---------- 상태 ----------
+let hand = { x: -999, y: -999, visible: false };   // 화면에 보이는 손 위치 (부드럽게 보간)
+let target = { x: -999, y: -999 };                 // 실제 측정된 손 위치
+let lastHandSeen = 0, lastMouseMove = 0;
+let happiness = 0;      // 0 ~ 100
+let fullness = 50;      // 0 ~ 100
+let pettingUntil = 0;   // 이 시각까지 '쓰다듬는 중'으로 간주
+let soundOn = true;
+let catState = "idle";  // idle | feeding | eating | action
+let eatStart = 0, eating = null;
+
+const FOODS = {
+  can:  { emoji: "🥫", full: 40, joy: 5,  thanks: "사료 맛있다냥! 😽" },
+  fish: { emoji: "🐟", full: 30, joy: 15, thanks: "생선 최고다냥! 😻" },
+  milk: { emoji: "🥛", full: 15, joy: 30, thanks: "우유 고소하다냥~ 💕" },
+};
+const ACTIONS = [
+  { name: "jump",  text: "냐옹~! 신난다! 🎉" },
+  { name: "roll",  text: "데굴데굴~ 😹" },
+  { name: "dance", text: "골골 댄스 타임! 💃" },
+];
+const EAT_TIME = 3000, DWELL_TIME = 1000;
+
+// ---------- 골골송 (Web Audio로 합성) ----------
+let audio = null;
+function initAudio() {
+  const ac = new AudioContext();
+  const len = ac.sampleRate * 2;
+  const buf = ac.createBuffer(1, len, ac.sampleRate);
+  const data = buf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < len; i++) {           // 갈색 잡음
+    last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+    data[i] = last * 3.5;
+  }
+  const src = ac.createBufferSource();
+  src.buffer = buf; src.loop = true;
+  const lp = ac.createBiquadFilter();
+  lp.type = "lowpass"; lp.frequency.value = 400;
+  const am = ac.createGain(); am.gain.value = 0.5;
+  const lfo = ac.createOscillator(); lfo.frequency.value = 24;  // 골골 떨림
+  const lfoDepth = ac.createGain(); lfoDepth.gain.value = 0.5;
+  lfo.connect(lfoDepth).connect(am.gain);
+  const master = ac.createGain(); master.gain.value = 0;
+  src.connect(lp).connect(am).connect(master).connect(ac.destination);
+  src.start(); lfo.start();
+  audio = { ac, master };
+}
+
+// ---------- 시작 ----------
+$("startMouse").onclick = () => { initAudio(); $("intro").remove(); statusEl.textContent = "마우스 모드"; };
+$("startCam").onclick = async () => {
+  initAudio();
+  $("intro").remove();
+  try { await startHandTracking(); }
+  catch (e) {
+    console.error(e);
+    statusEl.textContent = "카메라를 쓸 수 없어서 마우스 모드로 전환했어요";
+  }
+};
+$("soundBtn").onclick = () => { soundOn = !soundOn; $("soundBtn").textContent = soundOn ? "🔊" : "🔇"; };
+
+window.addEventListener("pointermove", e => {
+  if (performance.now() - lastHandSeen < 500) return;  // 손이 보이면 손이 우선
+  target.x = e.clientX; target.y = e.clientY;
+  lastMouseMove = performance.now();
+});
+
+// ---------- 핸드트래킹 ----------
+async function startHandTracking() {
+  statusEl.textContent = "손 인식 모델 불러오는 중...";
+  const { HandLandmarker, FilesetResolver } =
+    await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14");
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+  const landmarker = await HandLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+      delegate: "GPU"
+    },
+    runningMode: "VIDEO",
+    numHands: 1
+  });
+
+  statusEl.textContent = "카메라 켜는 중...";
+  const video = $("video");
+  video.srcObject = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+  await new Promise(r => video.onloadeddata = r);
+  $("preview").style.display = "block";
+  const overlay = $("overlay"), octx = overlay.getContext("2d");
+  overlay.width = video.videoWidth; overlay.height = video.videoHeight;
+  statusEl.textContent = "손을 카메라에 보여주세요 🖐️";
+
+  let lastTime = -1;
+  function detect() {
+    if (video.currentTime !== lastTime) {
+      lastTime = video.currentTime;
+      const res = landmarker.detectForVideo(video, performance.now());
+      octx.clearRect(0, 0, overlay.width, overlay.height);
+      const lm = res.landmarks[0];
+      if (lm) {
+        octx.fillStyle = "#ff6b9d";
+        for (const p of lm) {
+          octx.beginPath();
+          octx.arc(p.x * overlay.width, p.y * overlay.height, 4, 0, Math.PI * 2);
+          octx.fill();
+        }
+        // 손바닥 중심 = 손목 + 손가락 뿌리 관절 평균
+        const ids = [0, 5, 9, 13, 17];
+        const cx = ids.reduce((s, i) => s + lm[i].x, 0) / ids.length;
+        const cy = ids.reduce((s, i) => s + lm[i].y, 0) / ids.length;
+        // 거울 모드 + 카메라 가장자리까지 손을 뻗지 않아도 되도록 가운데 영역을 확대
+        const nx = clamp((1 - cx - 0.15) / 0.7, 0, 1);
+        const ny = clamp((cy - 0.1) / 0.7, 0, 1);
+        target.x = nx * innerWidth; target.y = ny * innerHeight;
+        lastHandSeen = performance.now();
+        statusEl.textContent = "손 인식 중 ✨";
+      } else if (performance.now() - lastHandSeen > 1000) {
+        statusEl.textContent = "손을 카메라에 보여주세요 🖐️";
+      }
+    }
+    requestAnimationFrame(detect);
+  }
+  detect();
+}
+
+// ---------- 하트, 말풍선 ----------
+let lastHeart = 0;
+function spawnHeart(x, y, dx = Math.random() * 80 - 40, dy = -160) {
+  const h = document.createElement("div");
+  h.className = "heart";
+  h.textContent = ["💕", "💖", "❤️", "✨", "💗"][Math.floor(Math.random() * 5)];
+  h.style.left = x + "px"; h.style.top = y + "px";
+  h.style.setProperty("--dx", dx + "px");
+  h.style.setProperty("--dy", dy + "px");
+  document.body.appendChild(h);
+  setTimeout(() => h.remove(), 1200);
+}
+function heartBurst() {
+  const r = $("head").getBoundingClientRect();
+  const cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    spawnHeart(cx, cy, Math.cos(a) * 220, Math.sin(a) * 220);
+  }
+}
+
+let bubbleTimer;
+function say(text, ms = 2000) {
+  $("bubble").textContent = text;
+  $("bubble").classList.add("show");
+  clearTimeout(bubbleTimer);
+  bubbleTimer = setTimeout(() => $("bubble").classList.remove("show"), ms);
+}
+
+// ---------- 게이지가 가득 차면 재롱 ----------
+function doAction() {
+  catState = "action";
+  const act = ACTIONS[Math.floor(Math.random() * ACTIONS.length)];
+  kittyEl.classList.add(act.name);
+  say(act.text, 1800);
+  heartBurst();
+  setTimeout(() => {
+    kittyEl.classList.remove(act.name);
+    happiness = 55;
+    catState = "idle";
+  }, 1700);
+}
+
+// ---------- 밥 주기 ----------
+const foodsEl = $("foods");
+const foodBtns = [...document.querySelectorAll(".food")];
+const dwell = new Map(foodBtns.map(b => [b, { t: 0, needLeave: false }]));
+
+function feed(type) {
+  if (catState !== "idle") return;
+  if (fullness > 90) { say("이미 배불러요 😹", 1800); return; }
+  const food = FOODS[type];
+  catState = "feeding";
+  foodsEl.classList.add("busy");
+
+  // 메뉴에서 밥그릇으로 날아가는 애니메이션
+  const from = document.querySelector(`[data-food="${type}"]`).getBoundingClientRect();
+  const to = $("bowl").getBoundingClientRect();
+  const fly = document.createElement("div");
+  fly.className = "flyFood";
+  fly.textContent = food.emoji;
+  fly.style.left = (from.left + from.right) / 2 + "px";
+  fly.style.top = (from.top + from.bottom) / 2 + "px";
+  document.body.appendChild(fly);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    fly.style.left = (to.left + to.right) / 2 + "px";
+    fly.style.top = to.top + 10 + "px";
+  }));
+  setTimeout(() => {
+    fly.remove();
+    $("bowlEmoji").textContent = food.emoji;
+    $("bowlFood").style.opacity = 1;
+    say("밥이다냥!", 1000);
+    eating = food; eatStart = performance.now();
+    catState = "eating";
+  }, 650);
+}
+foodBtns.forEach(b => b.onclick = () => feed(b.dataset.food));
+
+// ---------- 메인 루프 ----------
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const inRect = (x, y, r, pad = 0) =>
+  x > r.left - pad && x < r.right + pad && y > r.top - pad && y < r.bottom + pad;
+
+let lastTick = performance.now();
+function tick() {
+  const now = performance.now();
+  const dt = now - lastTick; lastTick = now;
+  const active = now - lastHandSeen < 500 || now - lastMouseMove < 2000;
+
+  const px = hand.x, py = hand.y;
+  if (active) {
+    if (!hand.visible) { hand.x = target.x; hand.y = target.y; }
+    hand.x += (target.x - hand.x) * 0.4;
+    hand.y += (target.y - hand.y) * 0.4;
+  }
+  hand.visible = active;
+  handEl.style.display = active ? "block" : "none";
+  handEl.style.left = hand.x + "px";
+  handEl.style.top = hand.y + "px";
+
+  // 밥 메뉴: 손을 1초 올려두면 선택
+  for (const btn of foodBtns) {
+    const d = dwell.get(btn);
+    const over = active && inRect(hand.x, hand.y, btn.getBoundingClientRect());
+    btn.classList.toggle("hover", over && catState === "idle");
+    if (!over) d.needLeave = false;
+    if (over && catState === "idle" && !d.needLeave) d.t += dt; else d.t = 0;
+    btn.style.setProperty("--p", Math.min(d.t / DWELL_TIME * 100, 100));
+    if (d.t >= DWELL_TIME) { d.t = 0; d.needLeave = true; feed(btn.dataset.food); }
+  }
+
+  // 쓰다듬기 판정: 고양이 위에서 손이 움직이고 있으면
+  const speed = active ? Math.hypot(hand.x - px, hand.y - py) : 0;
+  const headRect = $("head").getBoundingClientRect();
+  const bodyRect = $("body").getBoundingClientRect();
+  const onHead = active && inRect(hand.x, hand.y, headRect);
+  const onBody = active && !onHead && inRect(hand.x, hand.y, bodyRect);
+
+  if ((onHead || onBody) && speed > 1.5) {
+    if (catState !== "action") happiness += Math.min(speed, 30) * (onHead ? 0.06 : 0.035);
+    pettingUntil = now + 400;
+    if (now - lastHeart > 150) { lastHeart = now; spawnHeart(hand.x, hand.y - 30); }
+  }
+  const petting = now < pettingUntil;
+  if (!petting && catState === "idle") happiness -= 0.08;
+  happiness = clamp(happiness, 0, 100);
+  fullness = clamp(fullness - dt * 0.0006, 0, 100);   // 약 3분이면 배가 다 꺼짐
+
+  if (happiness >= 99.5 && catState === "idle") doAction();
+
+  // 먹는 중
+  let headTransform = "rotate(0deg)";
+  if (catState === "eating") {
+    const p = (now - eatStart) / EAT_TIME;
+    const bob = Math.sin(now / 90) * 6;
+    headTransform = `translate(-45px, ${60 + bob}px) rotate(-22deg)`;
+    $("bowlFood").style.transform = `scale(${Math.max(1 - p, 0.05)})`;
+    if (p >= 1) {
+      fullness = clamp(fullness + eating.full, 0, 100);
+      happiness = clamp(happiness + eating.joy, 0, 100);
+      say(eating.thanks, 2000);
+      $("bowlFood").style.opacity = 0;
+      $("bowlFood").style.transform = "";
+      foodsEl.classList.remove("busy");
+      catState = "idle";
+    }
+  } else if (onHead && petting) {
+    const tilt = clamp((hand.x - (headRect.left + headRect.right) / 2) / 8, -12, 12);
+    headTransform = `rotate(${tilt}deg)`;
+  }
+  $("head").style.transform = headTransform;
+
+  // 고양이 반응
+  const eatingNow = catState === "eating";
+  catEl.classList.toggle("happy", petting || eatingNow || catState === "action" || happiness > 85);
+  handEl.classList.toggle("petting", petting);
+  $("tail").style.animationDuration = (2 - happiness / 70) + "s";
+  $("purr").textContent = eatingNow ? "냠냠냠~" : "골골골~";
+  $("purr").style.opacity = eatingNow || (petting && happiness > 30) ? 1 : 0;
+  $("meterFill").style.width = happiness + "%";
+  $("fullFill").style.width = fullness + "%";
+  $("message").textContent =
+    catState === "eating" ? "맛있게 먹는 중... 🍽️" :
+    catState === "action" ? "고양이가 신났어요! 🎉" :
+    fullness < 25 && !petting ? "배고파요... 밥 주세요 🍚" :
+    happiness > 90 ? "세상에서 제일 행복한 고양이 💕" :
+    happiness > 60 ? "골골골... 너무 좋아요 😻" :
+    happiness > 25 ? "기분이 좋아지고 있어요 😺" :
+    petting ? "오? 좋은데...?" : "고양이를 쓰다듬어 주세요";
+
+  if (audio) {
+    const vol = soundOn && petting ? 0.3 + happiness / 200 : 0;
+    audio.master.gain.setTargetAtTime(vol, audio.ac.currentTime, 0.15);
+  }
+  requestAnimationFrame(tick);
+}
+tick();
+
+// 가끔 눈 깜빡이기
+setInterval(() => {
+  catEl.classList.add("blink");
+  setTimeout(() => catEl.classList.remove("blink"), 150);
+}, 3500);
+</script>
+</body>
+</html>
